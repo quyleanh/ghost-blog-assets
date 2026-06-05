@@ -1,0 +1,60 @@
+name: Auto Convert Assets to WebP and WebM
+
+on:
+  push:
+    branches:
+      - main  # Adjust this if your default branch is named 'master'
+    paths:
+      - '**.jpg'
+      - '**.jpeg'
+      - '**.png'
+      - '**.mp4'
+      - '**.mov'
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allows the workflow to commit back to the repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y webp ffmpeg
+
+      - name: Convert Images to WebP
+        run: |
+          find . -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" \) | while read -r file; do
+            webp_file="${file%.*}.webp"
+            if [ ! -f "$webp_file" ]; then
+              echo "Converting $file -> $webp_file"
+              cwebp -q 80 "$file" -o "$webp_file"
+            fi
+          done
+
+      - name: Convert Videos to WebM
+        run: |
+          find . -type f \( -name "*.mp4" -o -name "*.mov" \) | while read -r file; do
+            webm_file="${file%.*}.webm"
+            if [ ! -f "$webm_file" ]; then
+              echo "Converting $file -> $webm_file"
+              ffmpeg -i "$file" -c:v libvpx-vp9 -b:v 1M -c:a libvorbis "$webm_file" -y
+            fi
+          done
+
+      - name: Commit and Push Converted Files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: auto-convert assets to webp/webm [skip ci]"
+            git push
+          else
+            echo "No new assets to commit."
+          fi
